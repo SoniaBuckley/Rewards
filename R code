@@ -1,0 +1,59 @@
+#1. CALL IN DATA
+
+library(ROracle)
+drv <- dbDriver("Oracle")
+con <- dbConnect(drv,username="bge_campaigns",password="BGE_CAMPAIGNS1",dbname="ESMULORA1:1521/ESOAAD1.es.ie")
+sql <- "select * from rewards_impact_final_v5"
+dat <- dbGetQuery(con, sql)
+dbDisconnect(con)
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(survival)
+library(stargazer)
+
+#2. EXPLORE UNI VARIABLES
+stargazer(dat, type="text", median=TRUE, digits=2, title="Rewards Impact Analysis V4")
+
+#check churn rate for 1st November 2016 - 24 April 2017
+sum(dat$CHURNED)
+
+#Do histograms for quantitative variables
+days_cust_freq <- ggplot(dat,aes(x=DAYS_CUST))
+days_cust_freq + geom_histogram(binwidth=0.1,color='red',fill='pink', ylim = c(NA, NA))
+  + xlab('Days Customer')+ ylab('Number Days') + ggtitle(' Customer Retention Summary')
+
+
+
+#basic Kaplan-Meier estimator.
+# Create a "survival object" for each observation, using time and churn data.
+
+dat$survival <- Surv(dat$DAYS_CUST, dat$CHURNED == 1)
+
+# Fit a basic survival curve using the data
+
+fit <- survfit(survival ~ 1, data = dat)
+
+# Plot the survival curve and add a title!
+
+plot(fit, lty = 1, mark.time = FALSE, ylim=c(.75,1), xlab = 'Days since cust', ylab = 'Percent Surviving')
+title(main = 'Rewards Impact Data V2 Curve')
+
+#The Log-Rank test simply evaluates whether the underlying population survival curves for the two sampled groups are likely to be the same.
+net_lixx <- read.csv('C:/Users/dayne/Desktop/NetLixx.csv')
+net_lixx$survival <- Surv(net_lixx$time, net_lixx$churned == 1)
+
+# Fit survival curves based on the female binary
+
+fit <- survfit(survival ~ female, data = net_lixx)
+
+# Plot the results, add a legend, add a title
+
+plot(fit, lty = 1:2, mark.time = FALSE, ylim=c(.75,1), xlab = 'Days since Subscribing', ylab = 'Percent Surviving')
+legend(20, .8, c('Male', 'Female'), lty=1:2, bty = 'n', ncol = 2)
+title(main = "NetLixx Survival Curves by Gender")
+
+# And run a log-rank test
+
+survdiff(survival ~ female, data = net_lixx)
