@@ -1,0 +1,108 @@
+#1. CALL IN DATA
+
+library(ROracle)
+drv <- dbDriver("Oracle")
+con <- dbConnect(drv,username="bge_campaigns",password="BGE_CAMPAIGNS1",dbname="ESMULORA1:1521/ESOAAD1.es.ie")
+sql <- "select * from CHURN_ANALYSIS"
+dat <- dbGetQuery(con, sql)
+dbDisconnect(con)
+
+head(dat)
+colnames(dat)
+
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(survival)
+library(stargazer)
+library(survival)
+library(gof)
+
+#2.CLEAN THE DATA
+#make dummy codes out of all the data
+library(dummies)
+dat_binary <- dummy.data.frame(dat, names = c("SEGMENT", "BCONTRACT_TYPE"), sep = "")
+
+#Bivariabe against survival 
+#Add survival column
+dat_binary$survival <- Surv(dat_binary$DAYS_CUST, dat_binary$CHURN == 1)
+
+matrix(colnames(dat_binary))
+
+#Survdiff testin each predictor variable individually.  Any p value > 0.2 removed for 'full model'
+survdiff(formula = survival ~ BCONTRACT_TYPECONTRACT1, data = dat_binary)
+survdiff(formula = survival ~ BCONTRACT_TYPECONTRACT2, data = dat_binary)
+survdiff(formula = survival ~ BCONTRACT_TYPEFREE, data = dat_binary)
+survdiff(formula = survival ~ BCONTRACT_TYPENON_CONTRACT, data = dat_binary)
+survdiff(formula = survival ~ BCONTRACT_TYPENA, data = dat_binary)
+
+survdiff(formula = survival ~ LEVELPAY, data = dat_binary)
+survdiff(formula = survival ~ PAPERLESS, data = dat_binary)
+survdiff(formula = survival ~ USED_WILDCARD, data = dat_binary)
+
+survdiff(formula = survival ~ DF_DISCOUNT, data = dat_binary)
+survdiff(formula = survival ~ GASELEC_NODISCOUNT, data = dat_binary)
+
+survdiff(formula = survival ~ DAYS_GAS, data = dat_binary)
+
+survdiff(formula = survival ~ DAYS_ELEC, data = dat_binary) 
+
+
+
+#3.REGRESSION ANALYSIS
+#variables removed that are over 0.2 as above: none
+
+
+results <- coxph(dat_binary$survival ~ BCONTRACT_TYPECONTRACT1 +  BCONTRACT_TYPECONTRACT2 +  BCONTRACT_TYPEFREE + 
+                   BCONTRACT_TYPENON_CONTRACT + DF_DISCOUNT + DAYS_GAS + GASELEC_NODISCOUNT + DAYS_ELEC + LEVELPAY + PAPERLESS + 
+                   USED_WILDCARD, data = dat_binary)
+
+
+#REMOVE INSIGNIFICANT VARIABLES, ONE AT A TIME UNTIL ALL P VALUES ARE UNDER 0.05
+#Remove variables which are LINERALY RELATED (Come out as NA): 
+
+#Remove p value more than 0.05: none  
+
+results <- coxph(dat_binary$survival ~ BCONTRACT_TYPECONTRACT1 +  BCONTRACT_TYPECONTRACT2 +  BCONTRACT_TYPEFREE + 
+                   BCONTRACT_TYPENON_CONTRACT + DF_DISCOUNT + DAYS_GAS + GASELEC_NODISCOUNT + DAYS_ELEC + LEVELPAY + PAPERLESS + 
+                   USED_WILDCARD, data = dat_binary)
+
+results
+
+#add variables with p value > 0.2 back into model and check their p vlaue.  If under 0.05 keep in the model, otherwise remove and replace with the next variable
+#VARIBALES TO TRY PUT BACK IN: NONE
+
+#remove variables with high VIF scores, one at a time and then remove any variables with p value more than 0.05 (one at a time)
+vif(results)
+#Highest VIF score: None
+#Remove p values > 0.05: 
+
+
+results <- coxph(dat_binary$survival ~ BCONTRACT_TYPECONTRACT1 +  BCONTRACT_TYPECONTRACT2 +  BCONTRACT_TYPEFREE + 
+                   BCONTRACT_TYPENON_CONTRACT + DF_DISCOUNT + DAYS_GAS + GASELEC_NODISCOUNT + DAYS_ELEC + LEVELPAY + PAPERLESS + 
+                   USED_WILDCARD, data = dat_binary)
+
+results
+
+summary(results)
+AIC(results)
+
+#test for time depentdant variables
+#remove lowest p values one at a time by placing a 'strata()' in front of the variable with lowest p value.  Check p if they become insignifcant each time.
+#removed from p values:  DF_DISCOUNT + USED_WILDCARD
+
+cox.zph(results)
+
+results <- coxph(dat_binary$survival ~ BCONTRACT_TYPECONTRACT1 +  BCONTRACT_TYPECONTRACT2 +  BCONTRACT_TYPEFREE + 
+                   BCONTRACT_TYPENON_CONTRACT + strata(DAYS_GAS) + strata(GASELEC_NODISCOUNT) + strata(DAYS_ELEC) + strata(LEVELPAY) + strata(PAPERLESS, data = dat_binary)
+                 
+                 results
+                 cox.zph(results)
+                 
+                 #look at kaplan curves for variables that are stratified
+                 dat.surv2 <- survfit(Surv(DAYS_CUST,CHURNED) ~ BCONTRACT_TYPENON_CONTRACT, data = dat_binary)
+                 (pl2 <- ggsurv(dat.surv2))
+                 
+                 (pl2 <- pl2 + guides(linetype = F) +
+                     scale_colour_discrete(name = 'BCONTRACT_TYPENON_CONTRACT', breaks = c(1,2), labels=c('Duel Fuel Discount', 'No DF disc')))
